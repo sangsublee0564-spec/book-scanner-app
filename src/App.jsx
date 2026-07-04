@@ -8,24 +8,46 @@ function App() {
   const [isbn, setIsbn] = useState(null)
   const [book, setBook] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [devices, setDevices] = useState([])
+  const [deviceId, setDeviceId] = useState(null)
+
+  // 사용 가능한 카메라 목록 가져오기
+  useEffect(() => {
+    async function loadDevices() {
+      try {
+        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true })
+        tempStream.getTracks().forEach((t) => t.stop())
+      } catch (e) {
+        setError(e.message)
+        return
+      }
+      const allDevices = await navigator.mediaDevices.enumerateDevices()
+      const videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
+      setDevices(videoInputs)
+      if (videoInputs.length > 0) {
+        setDeviceId(videoInputs[videoInputs.length - 1].deviceId)
+      }
+    }
+    loadDevices()
+  }, [])
 
   // 카메라로 바코드 스캔하기
   useEffect(() => {
-    if (isbn) return
+    if (isbn || !deviceId) return
     const codeReader = new BrowserMultiFormatReader()
 
     async function startScanning() {
       try {
         const controls = await codeReader.decodeFromConstraints(
-  {
-    video: {
-      facingMode: { ideal: 'environment' },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
-      advanced: [{ focusMode: 'continuous' }],
-    },
-  },
-  videoRef.current,
+          {
+            video: {
+              deviceId: { exact: deviceId },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              advanced: [{ focusMode: 'continuous' }],
+            },
+          },
+          videoRef.current,
           (result) => {
             if (result) setIsbn(result.getText())
           }
@@ -38,7 +60,7 @@ function App() {
 
     startScanning()
     return () => controlsRef.current?.stop()
-  }, [isbn])
+  }, [isbn, deviceId])
 
   // ISBN이 인식되면 우리 서버에 책 정보 요청하기
   useEffect(() => {
@@ -48,7 +70,7 @@ function App() {
     setBook(null)
 
     const apiBase = import.meta.env.DEV ? 'http://localhost:4000' : ''
-fetch(`${apiBase}/api/book?isbn=${isbn}`)
+    fetch(`${apiBase}/api/book?isbn=${isbn}`)
       .then((res) => res.json())
       .then((data) => {
         setBook(data)
@@ -70,6 +92,20 @@ fetch(`${apiBase}/api/book?isbn=${isbn}`)
     <div style={{ textAlign: 'center', padding: '20px', maxWidth: '480px', margin: '0 auto' }}>
       <h1>📚 책 스캔 앱</h1>
       {error && <p style={{ color: 'red' }}>오류: {error}</p>}
+
+      {!isbn && devices.length > 1 && (
+        <select
+          value={deviceId || ''}
+          onChange={(e) => setDeviceId(e.target.value)}
+          style={{ marginBottom: '10px', padding: '6px', width: '100%' }}
+        >
+          {devices.map((d, i) => (
+            <option key={d.deviceId} value={d.deviceId}>
+              {d.label || `카메라 ${i + 1}`}
+            </option>
+          ))}
+        </select>
+      )}
 
       {!isbn && (
         <video ref={videoRef} style={{ width: '100%', borderRadius: '12px' }} />
