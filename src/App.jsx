@@ -1,11 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrowserMultiFormatReader } from '@zxing/browser'
-import './App.css'
-
-function renderStars(rating10) {
-  const fiveScale = Math.round(rating10 / 2)
-  return '★'.repeat(fiveScale) + '☆'.repeat(5 - fiveScale)
-}
 
 function App() {
   const videoRef = useRef(null)
@@ -92,88 +86,78 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <span className="app-icon">📚</span>
-        <h1>책 스캔</h1>
-      </header>
+    <div style={{ textAlign: 'center', padding: '20px', maxWidth: '480px', margin: '0 auto' }}>
+      <h1>📚 책 스캔 앱</h1>
+      {error && <p style={{ color: 'red' }}>오류: {error}</p>}
 
-      <main className="app-main">
-        {error && <div className="alert-error">⚠️ {error}</div>}
+      {!isbn && devices.length > 1 && (
+        <select
+          value={deviceId || ''}
+          onChange={(e) => setDeviceId(e.target.value)}
+          style={{ marginBottom: '10px', padding: '6px', width: '100%' }}
+        >
+          {devices.map((d, i) => (
+            <option key={d.deviceId} value={d.deviceId}>
+              {d.label || `카메라 ${i + 1}`}
+            </option>
+          ))}
+        </select>
+      )}
 
-        {!isbn && (
-          <div className="scanner-card">
-            {devices.length > 1 && (
-              <select
-                className="camera-select"
-                value={deviceId || ''}
-                onChange={(e) => setDeviceId(e.target.value)}
-              >
-                {devices.map((d, i) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `카메라 ${i + 1}`}
-                  </option>
+      {!isbn && (
+        <video
+          ref={videoRef}
+          style={{
+            width: '100%',
+            maxHeight: '320px',
+            objectFit: 'cover',
+            borderRadius: '12px',
+          }}
+        />
+      )}
+
+      {loading && <p>책 정보를 가져오는 중...</p>}
+
+      {book && (
+        <div style={{ textAlign: 'left', marginTop: '16px' }}>
+          {book.cover && (
+            <img
+              src={book.cover}
+              alt={book.title}
+              style={{ width: '150px', display: 'block', margin: '0 auto 12px' }}
+            />
+          )}
+          <h2 style={{ textAlign: 'center' }}>{book.title || '제목을 찾을 수 없습니다'}</h2>
+          <p style={{ textAlign: 'center', color: '#555' }}>
+            {book.author} · {book.publisher}
+          </p>
+          {book.rating != null && (
+            <p style={{ textAlign: 'center' }}>⭐ 평점: {book.rating} / 10</p>
+          )}
+          {book.description && (
+            <p style={{ marginTop: '12px', lineHeight: 1.5 }}>{book.description}</p>
+          )}
+
+          {book.blogPosts?.length > 0 && (
+            <div style={{ marginTop: '16px' }}>
+              <h3>관련 블로그 글</h3>
+              <ul>
+                {book.blogPosts.map((post, i) => (
+                  <li key={i}>
+                    <a href={post.link} target="_blank" rel="noreferrer">
+                      {post.title}
+                    </a>
+                  </li>
                 ))}
-              </select>
-            )}
-            <div className="video-wrapper">
-              <video ref={videoRef} className="video-preview" />
-              <div className="scan-frame" />
+              </ul>
             </div>
-            <p className="scan-hint">바코드를 사각형 안에 비춰주세요</p>
-          </div>
-        )}
+          )}
 
-        {loading && (
-          <div className="loading-box">
-            <div className="spinner" />
-            <p>책 정보를 가져오는 중...</p>
-          </div>
-        )}
-
-        {book && (
-          <div className="result-card">
-            {book.cover && (
-              <img src={book.cover} alt={book.title} className="book-cover" />
-            )}
-            <h2 className="book-title">{book.title || '제목을 찾을 수 없습니다'}</h2>
-            <p className="book-meta">{book.author} · {book.publisher}</p>
-
-            {book.rating != null && (
-              <div className="rating-badge">
-                <span className="stars">{renderStars(book.rating)}</span>
-                <span>{book.rating}/10</span>
-              </div>
-            )}
-
-            {book.description && (
-              <div className="description-box">
-                <p>{book.description}</p>
-              </div>
-            )}
-
-            {book.blogPosts?.length > 0 && (
-              <div className="blog-section">
-                <h3>관련 블로그 글</h3>
-                <ul className="blog-list">
-                  {book.blogPosts.map((post, i) => (
-                    <li key={i}>
-                      <a href={post.link} target="_blank" rel="noreferrer" className="blog-item">
-                        <span>{post.title}</span>
-                        <span className="chevron">›</span>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <button onClick={handleRescan} className="rescan-btn">
-              🔄 다시 스캔하기
-            </button>
-          </div>
-        )}
-      </main>
+          <button onClick={handleRescan} style={{ marginTop: '20px', padding: '10px 20px' }}>
+            다시 스캔하기
+          </button>
+        </div>
+      )}
     </div>
   )
 }
