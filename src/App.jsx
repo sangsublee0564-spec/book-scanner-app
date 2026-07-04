@@ -17,7 +17,15 @@ function App() {
     async function startScanning() {
       try {
         const controls = await codeReader.decodeFromConstraints(
-          { video: { facingMode: 'environment' } },
+  {
+    video: {
+      facingMode: { ideal: 'environment' },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      advanced: [{ focusMode: 'continuous' }],
+    },
+  },
+  videoRef.current,
           videoRef.current,
           (result) => {
             if (result) setIsbn(result.getText())
