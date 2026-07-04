@@ -26,7 +26,6 @@ function App() {
     },
   },
   videoRef.current,
-          videoRef.current,
           (result) => {
             if (result) setIsbn(result.getText())
           }
