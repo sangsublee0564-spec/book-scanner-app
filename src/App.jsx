@@ -40,7 +40,8 @@ function App() {
     setLoading(true)
     setBook(null)
 
-    fetch(`http://localhost:4000/api/book?isbn=${isbn}`)
+    const apiBase = import.meta.env.DEV ? 'http://localhost:4000' : ''
+fetch(`${apiBase}/api/book?isbn=${isbn}`)
       .then((res) => res.json())
       .then((data) => {
         setBook(data)
