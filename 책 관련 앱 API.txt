@@ -1,0 +1,10 @@
+책 관련 앱 API
+알라딘
+ttbsangsub.lee05641659001
+네이버
+Client ID
+yVqCI34rXVK6JJTdzQcQ
+
+Client Secret
+yI1gsjT9dM
+
