@@ -18,56 +18,49 @@ function App() {
   const [deviceId, setDeviceId] = useState(null)
 
   useEffect(() => {
-    async function loadDevices() {
-      try {
-        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true })
-        tempStream.getTracks().forEach((t) => t.stop())
-      } catch (e) {
-        setError(e.message)
-        return
-      }
-      const allDevices = await navigator.mediaDevices.enumerateDevices()
-      const videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
-      setDevices(videoInputs)
-      if (videoInputs.length > 0) {
-        setDeviceId(videoInputs[videoInputs.length - 1].deviceId)
-      }
-    }
-    loadDevices()
-  }, [])
-
-  useEffect(() => {
-    if (isbn || !deviceId) return
+    if (isbn) return
     const codeReader = new BrowserMultiFormatReader()
     let cancelled = false
 
     async function startScanning() {
-      // 카메라 하드웨어가 이전 스트림을 완전히 정리할 시간을 살짝 줍니다
-      await new Promise((resolve) => setTimeout(resolve, 300))
-      if (cancelled) return
-
       try {
-        const controls = await codeReader.decodeFromConstraints(
-          {
-            video: {
+        // deviceId를 아직 고르지 않았으면(최초 진입) facingMode로 후면 카메라를 한 번에 요청합니다.
+        // 사용자가 드롭다운에서 특정 카메라를 고른 뒤에는 그 deviceId를 정확히 지정합니다.
+        const constraints = deviceId
+          ? {
               deviceId: { exact: deviceId },
               width: { ideal: 1920 },
               height: { ideal: 1080 },
               advanced: [{ focusMode: 'continuous' }],
-            },
-          },
+            }
+          : {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              advanced: [{ focusMode: 'continuous' }],
+            }
+
+        const controls = await codeReader.decodeFromConstraints(
+          { video: constraints },
           videoRef.current,
           (result) => {
             if (result) setIsbn(result.getText())
           }
         )
+
         if (cancelled) {
           controls.stop()
           return
         }
         controlsRef.current = controls
-        // 일부 브라우저에서 스트림 연결 후 자동재생이 안 되는 경우를 대비해 명시적으로 재생 시도
         videoRef.current?.play().catch(() => {})
+
+        // 권한이 열린 뒤에 카메라 목록(라벨 포함)을 가져와 드롭다운을 채웁니다 (최초 1회만)
+        if (devices.length === 0) {
+          const allDevices = await navigator.mediaDevices.enumerateDevices()
+          const videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
+          if (!cancelled) setDevices(videoInputs)
+        }
       } catch (err) {
         if (!cancelled) setError(err.message)
       }
