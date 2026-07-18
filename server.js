@@ -47,7 +47,7 @@ app.get('/api/book', async (req, res) => {
   // 2) 네이버: 관련 블로그 글 목록
   try {
     const searchKeyword = (result.title || isbn) + ' 서평'
-    const naverUrl = `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(searchKeyword)}&display=5`
+    const naverUrl = `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(searchKeyword)}&display=3`
     const naverRes = await fetch(naverUrl, {
       headers: {
         'X-Naver-Client-Id': process.env.NAVER_CLIENT_ID,

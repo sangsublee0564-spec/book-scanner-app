@@ -35,7 +35,7 @@ export default async function handler(req, res) {
 
   try {
     const searchKeyword = (result.title || isbn) + ' 서평'
-    const naverUrl = `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(searchKeyword)}&display=5`
+    const naverUrl = `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(searchKeyword)}&display=3`
     const naverRes = await fetch(naverUrl, {
       headers: {
         'X-Naver-Client-Id': process.env.NAVER_CLIENT_ID,
