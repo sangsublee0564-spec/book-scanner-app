@@ -7,12 +7,6 @@ function renderStars(rating10) {
   return '★'.repeat(fiveScale) + '☆'.repeat(5 - fiveScale)
 }
 
-// 라벨에서 "camera 2, facing back" 같은 문자열의 숫자(2)를 뽑아냄
-function extractCameraIndex(label = '') {
-  const match = label.match(/(\d+)/)
-  return match ? parseInt(match[1], 10) : Infinity
-}
-
 function App() {
   const videoRef = useRef(null)
   const controlsRef = useRef(null)
@@ -20,8 +14,8 @@ function App() {
   const [isbn, setIsbn] = useState(null)
   const [book, setBook] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [devices, setDevices] = useState([])
   const [deviceId, setDeviceId] = useState(null)
-  const [videoPlaying, setVideoPlaying] = useState(false)
 
   useEffect(() => {
     async function loadDevices() {
@@ -34,15 +28,9 @@ function App() {
       }
       const allDevices = await navigator.mediaDevices.enumerateDevices()
       const videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
-
-      const backDevices = videoInputs.filter((d) => /back/i.test(d.label))
-      const candidates = backDevices.length > 0 ? backDevices : videoInputs
-
-      if (candidates.length > 0) {
-        const best = [...candidates].sort(
-          (a, b) => extractCameraIndex(a.label) - extractCameraIndex(b.label)
-        )[0]
-        setDeviceId(best.deviceId)
+      setDevices(videoInputs)
+      if (videoInputs.length > 0) {
+        setDeviceId(videoInputs[videoInputs.length - 1].deviceId)
       }
     }
     loadDevices()
@@ -51,8 +39,6 @@ function App() {
   useEffect(() => {
     if (isbn || !deviceId) return
     const codeReader = new BrowserMultiFormatReader()
-    let nudgeInterval = null
-    let onPlaying = null
 
     async function startScanning() {
       try {
@@ -75,32 +61,15 @@ function App() {
         const v = videoRef.current
         if (v) {
           v.muted = true
-          onPlaying = () => setVideoPlaying(true)
-          v.addEventListener('playing', onPlaying)
           v.play().catch(() => {})
         }
-
-        // 재생이 실제로 시작될 때까지, 멈춰있으면 조용히 재생만 계속 다시 시도
-        nudgeInterval = setInterval(() => {
-          const vid = videoRef.current
-          if (vid && vid.paused) {
-            vid.play().catch(() => {})
-          }
-        }, 300)
       } catch (err) {
         setError(err.message)
       }
     }
 
     startScanning()
-    return () => {
-      clearInterval(nudgeInterval)
-      if (videoRef.current && onPlaying) {
-        videoRef.current.removeEventListener('playing', onPlaying)
-      }
-      controlsRef.current?.stop()
-      setVideoPlaying(false)
-    }
+    return () => controlsRef.current?.stop()
   }, [isbn, deviceId])
 
   useEffect(() => {
@@ -131,7 +100,7 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <img src="/icons.svg" alt="" className="app-icon" />
+        <span className="app-icon">📚</span>
         <span className="app-title">책 스캔</span>
       </header>
 
@@ -140,23 +109,24 @@ function App() {
 
         {!isbn && (
           <div className="scan-card">
-            <div className="video-box">
-              <video
-                ref={videoRef}
-                className="video-el"
-                autoPlay
-                playsInline
-                muted
-                style={{ opacity: videoPlaying ? 1 : 0 }}
-              />
-            </div>
-            {!videoPlaying && (
-              <div className="loading">
-                <div className="spinner" />
-                <span>카메라 준비 중...</span>
-              </div>
+            {devices.length > 1 && (
+              <select
+                className="camera-select"
+                value={deviceId || ''}
+                onChange={(e) => setDeviceId(e.target.value)}
+              >
+                {devices.map((d, i) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `카메라 ${i + 1}`}
+                  </option>
+                ))}
+              </select>
             )}
-            <p className="hint">바코드를 카메라에 비춰주세요</p>
+            <div className="video-box">
+              <video ref={videoRef} className="video-el" autoPlay playsInline muted />
+              <div className="scan-guide" />
+            </div>
+            <p className="hint">바코드를 사각형 안에 맞춰주세요</p>
           </div>
         )}
 
@@ -192,22 +162,10 @@ function App() {
                   <span className="naver-badge">N</span>
                   <span>네이버 블로그 리뷰</span>
                 </div>
-
-                {book.blogRecommendation && (
-                  <div className="blog-recommend">
-                    <span className="blog-recommend-percent">
-                      👍 {book.blogRecommendation.recommendPercent}%
-                    </span>
-                    <span className="blog-recommend-summary">
-                      {book.blogRecommendation.summary}
-                    </span>
-                  </div>
-                )}
-
                 <ul className="blog-list">
                   {book.blogPosts.slice(0, 3).map((post, i) => (
                     <li key={i}>
-                        <a
+                      
                         href={post.link}
                         target="_blank"
                         rel="noreferrer"
