@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { BrowserMultiFormatReader } from '@zxing/browser'
 import './App.css'
 
-const MAX_RETRIES = 3
-
 function renderStars(rating10) {
   const fiveScale = Math.round(rating10 / 2)
   return '★'.repeat(fiveScale) + '☆'.repeat(5 - fiveScale)
@@ -12,140 +10,61 @@ function renderStars(rating10) {
 function App() {
   const videoRef = useRef(null)
   const controlsRef = useRef(null)
-  const initedRef = useRef(false)
   const [error, setError] = useState(null)
   const [isbn, setIsbn] = useState(null)
   const [book, setBook] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [devices, setDevices] = useState([])
   const [deviceId, setDeviceId] = useState(null)
-  const [camReady, setCamReady] = useState(false)
-  const [retryTick, setRetryTick] = useState(0)
-  const [giveUp, setGiveUp] = useState(false)
 
-  // 1) 마운트 시 카메라 목록을 조사해서 "후면(facing back)" 카메라를 자동으로 찾음
   useEffect(() => {
-    if (initedRef.current) return
-    initedRef.current = true
-
-    let cancelled = false
-
-    async function initCamera() {
+    async function loadDevices() {
       try {
-        let allDevices = await navigator.mediaDevices.enumerateDevices()
-        let videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
-
-        if (videoInputs.length > 0 && videoInputs.every((d) => !d.label)) {
-          const tempStream = await navigator.mediaDevices.getUserMedia({ video: true })
-          tempStream.getTracks().forEach((t) => t.stop())
-          allDevices = await navigator.mediaDevices.enumerateDevices()
-          videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
-        }
-
-        if (cancelled) return
-
-        const backDevice =
-          videoInputs.find((d) => /back/i.test(d.label)) || videoInputs[0]
-
-        setDeviceId(backDevice ? backDevice.deviceId : null)
-      } catch (err) {
-        console.error('카메라 목록 조사 실패:', err.message)
-      } finally {
-        if (!cancelled) setCamReady(true)
+        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true })
+        tempStream.getTracks().forEach((t) => t.stop())
+      } catch (e) {
+        setError(e.message)
+        return
+      }
+      const allDevices = await navigator.mediaDevices.enumerateDevices()
+      const videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
+      setDevices(videoInputs)
+      if (videoInputs.length > 0) {
+        setDeviceId(videoInputs[videoInputs.length - 1].deviceId)
       }
     }
-
-    initCamera()
-
-    return () => {
-      cancelled = true
-    }
+    loadDevices()
   }, [])
 
-  // 2) 실제 스캔 시작 (camReady된 뒤에만, 멈춰있으면 조용히 자동 복구)
   useEffect(() => {
-    if (isbn || !camReady || giveUp) return
-    let cancelled = false
-    let watchdogInterval = null
-    let watchdogTimer = null
+    if (isbn || !deviceId) return
+    const codeReader = new BrowserMultiFormatReader()
 
-    function pickConstraints(id) {
-      return id
-        ? {
-            deviceId: { exact: id },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          }
-        : {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          }
-    }
-
-    async function attemptScan() {
-      const codeReader = new BrowserMultiFormatReader()
+    async function startScanning() {
       try {
         const controls = await codeReader.decodeFromConstraints(
-          { video: pickConstraints(deviceId) },
+          {
+            video: {
+              deviceId: { exact: deviceId },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              advanced: [{ focusMode: 'continuous' }],
+            },
+          },
           videoRef.current,
           (result) => {
             if (result) setIsbn(result.getText())
           }
         )
-
-        if (cancelled) {
-          controls.stop()
-          return
-        }
         controlsRef.current = controls
-        if (videoRef.current) {
-          videoRef.current.muted = true
-          videoRef.current.play().catch(() => {})
-        }
-
-        // 0.5초마다 멈춰있는지 조용히 확인하고, 멈췄으면 재생만 다시 시도
-        watchdogInterval = setInterval(() => {
-          if (cancelled) return
-          const v = videoRef.current
-          const stream = v?.srcObject
-          const track = stream?.getVideoTracks?.()[0]
-
-          if (v && v.paused && track && track.readyState === 'live') {
-            v.play().catch(() => {})
-          }
-        }, 500)
-
-        // 1.5초 후에도 여전히 멈춰있으면 스트림 자체를 껐다가 다시 켬
-        watchdogTimer = setTimeout(() => {
-          if (cancelled) return
-          const v = videoRef.current
-          const notReady = !v || v.readyState < 2 || v.videoWidth === 0 || v.paused
-          if (notReady) {
-            controlsRef.current?.stop()
-            setRetryTick((n) => {
-              const next = n + 1
-              if (next > MAX_RETRIES) {
-                setGiveUp(true)
-                return n
-              }
-              return next
-            })
-          }
-        }, 1500)
       } catch (err) {
-        if (!cancelled) setError(err.message)
+        setError(err.message)
       }
     }
 
-    attemptScan()
-
-    return () => {
-      cancelled = true
-      clearInterval(watchdogInterval)
-      clearTimeout(watchdogTimer)
-      controlsRef.current?.stop()
-    }
-  }, [isbn, deviceId, camReady, retryTick, giveUp])
+    startScanning()
+    return () => controlsRef.current?.stop()
+  }, [isbn, deviceId])
 
   useEffect(() => {
     if (!isbn) return
@@ -172,12 +91,6 @@ function App() {
     setError(null)
   }
 
-  function handleManualRetry() {
-    setGiveUp(false)
-    setError(null)
-    setRetryTick((n) => n + 1)
-  }
-
   return (
     <div className="app">
       <header className="app-header">
@@ -190,17 +103,22 @@ function App() {
 
         {!isbn && (
           <div className="scan-card">
+            {devices.length > 1 && (
+              <select
+                className="camera-select"
+                value={deviceId || ''}
+                onChange={(e) => setDeviceId(e.target.value)}
+              >
+                {devices.map((d, i) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `카메라 ${i + 1}`}
+                  </option>
+                ))}
+              </select>
+            )}
             <div className="video-box">
               <video ref={videoRef} className="video-el" autoPlay playsInline muted />
             </div>
-            {giveUp && (
-              <div className="alert" style={{ marginTop: '8px' }}>
-                ⚠️ 카메라 연결이 원활하지 않습니다.
-                <button onClick={handleManualRetry} className="rescan-btn" style={{ marginTop: '8px' }}>
-                  🔄 다시 시도
-                </button>
-              </div>
-            )}
             <p className="hint">바코드를 카메라에 비춰주세요</p>
           </div>
         )}
