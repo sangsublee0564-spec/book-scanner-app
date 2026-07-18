@@ -21,26 +21,46 @@ function App() {
     if (isbn) return
     let cancelled = false
     let watchdogTimer = null
+    let frameSeen = false
 
-    async function attemptScan(retryCount) {
-      const codeReader = new BrowserMultiFormatReader()
+    function pickConstraints(id) {
+      return id
+        ? {
+            deviceId: { exact: id },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            advanced: [{ focusMode: 'continuous' }],
+          }
+        : {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            advanced: [{ focusMode: 'continuous' }],
+          }
+    }
+
+    async function warmUpOtherCamera(excludeId) {
       try {
-        const constraints = deviceId
-          ? {
-              deviceId: { exact: deviceId },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
-              advanced: [{ focusMode: 'continuous' }],
-            }
-          : {
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
-              advanced: [{ focusMode: 'continuous' }],
-            }
+        const allDevices = await navigator.mediaDevices.enumerateDevices()
+        const videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
+        const other = videoInputs.find((d) => d.deviceId !== excludeId)
+        if (!other) return
+        const tempStream = await navigator.mediaDevices.getUserMedia({
+          video: { deviceId: { exact: other.deviceId } },
+        })
+        await new Promise((resolve) => setTimeout(resolve, 400))
+        tempStream.getTracks().forEach((t) => t.stop())
+      } catch (e) {
+        // 워밍업 실패해도 무시하고 원래 카메라 재시도로 넘어갑니다
+      }
+    }
 
+    async function attemptScan(retryCount, targetDeviceId) {
+      const codeReader = new BrowserMultiFormatReader()
+      frameSeen = false
+      try {
         const controls = await codeReader.decodeFromConstraints(
-          { video: constraints },
+          { video: pickConstraints(targetDeviceId) },
           videoRef.current,
           (result) => {
             if (result) setIsbn(result.getText())
@@ -60,22 +80,33 @@ function App() {
           if (!cancelled) setDevices(videoInputs)
         }
 
-        // 워치독: 2초 뒤에도 영상이 실제로 흘러가고 있지 않으면 자동으로 한 번 재시작합니다
-        const startTime = videoRef.current?.currentTime ?? 0
-        watchdogTimer = setTimeout(() => {
-          if (cancelled) return
-          const nowTime = videoRef.current?.currentTime ?? 0
-          if (nowTime <= startTime && retryCount < 1) {
-            controls.stop()
-            attemptScan(retryCount + 1)
+        const videoEl = videoRef.current
+        if (videoEl?.requestVideoFrameCallback) {
+          const onFrame = () => {
+            frameSeen = true
+            if (!cancelled) {
+              videoEl.requestVideoFrameCallback(onFrame)
+            }
           }
-        }, 2000)
+          videoEl.requestVideoFrameCallback(onFrame)
+        } else {
+          frameSeen = true
+        }
+
+        watchdogTimer = setTimeout(async () => {
+          if (cancelled) return
+          if (!frameSeen && retryCount < 1) {
+            controls.stop()
+            await warmUpOtherCamera(targetDeviceId)
+            if (!cancelled) attemptScan(retryCount + 1, targetDeviceId)
+          }
+        }, 2500)
       } catch (err) {
         if (!cancelled) setError(err.message)
       }
     }
 
-    attemptScan(0)
+    attemptScan(0, deviceId)
 
     return () => {
       cancelled = true
