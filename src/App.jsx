@@ -11,6 +11,15 @@ function App() {
   const [debugInfo, setDebugInfo] = useState('')
   const [playError, setPlayError] = useState('')
 
+  // video 엘리먼트가 생성되는 즉시 muted를 확정시킴 (자동재생 정책 회피)
+  function setVideoRef(el) {
+    videoRef.current = el
+    if (el) {
+      el.muted = true
+      el.defaultMuted = true
+    }
+  }
+
   useEffect(() => {
     if (result) return
 
@@ -45,6 +54,7 @@ function App() {
         const v = videoRef.current
         if (v) {
           v.muted = true
+          v.defaultMuted = true
           v.play().catch((e) => setPlayError(`${e.name}: ${e.message}`))
 
           if ('requestVideoFrameCallback' in v) {
@@ -60,25 +70,24 @@ function App() {
           }
         }
 
-        // 멈춰있으면 0.3초마다 조용히 재생 재시도
         nudgeInterval = setInterval(() => {
           if (cancelled) return
           const vid = videoRef.current
           if (vid && vid.paused) {
+            vid.muted = true
             vid.play().catch((e) => setPlayError(`${e.name}: ${e.message}`))
           }
         }, 300)
 
-        // 진단용 상태 표시
         debugInterval = setInterval(() => {
           if (cancelled) return
           const v2 = videoRef.current
           const stream = v2?.srcObject
           const track = stream?.getVideoTracks?.()[0]
           setDebugInfo(
-            `readyState=${v2?.readyState} paused=${v2?.paused} ` +
+            `readyState=${v2?.readyState} paused=${v2?.paused} muted=${v2?.muted} ` +
             `size=${v2?.videoWidth}x${v2?.videoHeight} frames=${frameCount} ` +
-            `trackState=${track?.readyState} hasSrc=${!!v2?.srcObject}`
+            `trackState=${track?.readyState}`
           )
         }, 500)
       } catch (err) {
@@ -113,7 +122,7 @@ function App() {
         <>
           <div style={{ position: 'relative' }}>
             <video
-              ref={videoRef}
+              ref={setVideoRef}
               className="video-el"
               autoPlay
               playsInline
