@@ -16,12 +16,12 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [devices, setDevices] = useState([])
   const [deviceId, setDeviceId] = useState(null)
+  const [debugInfo, setDebugInfo] = useState('')
 
   useEffect(() => {
     if (isbn) return
     let cancelled = false
-    let watchdogTimer = null
-    let frameSeen = false
+    let debugInterval = null
 
     function pickConstraints(id) {
       return id
@@ -39,28 +39,11 @@ function App() {
           }
     }
 
-    async function warmUpOtherCamera(excludeId) {
-      try {
-        const allDevices = await navigator.mediaDevices.enumerateDevices()
-        const videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
-        const other = videoInputs.find((d) => d.deviceId !== excludeId)
-        if (!other) return
-        const tempStream = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: { exact: other.deviceId } },
-        })
-        await new Promise((resolve) => setTimeout(resolve, 400))
-        tempStream.getTracks().forEach((t) => t.stop())
-      } catch (e) {
-        // 워밍업 실패해도 무시하고 원래 카메라 재시도로 넘어갑니다
-      }
-    }
-
-    async function attemptScan(retryCount, targetDeviceId) {
+    async function attemptScan() {
       const codeReader = new BrowserMultiFormatReader()
-      frameSeen = false
       try {
         const controls = await codeReader.decodeFromConstraints(
-          { video: pickConstraints(targetDeviceId) },
+          { video: pickConstraints(deviceId) },
           videoRef.current,
           (result) => {
             if (result) setIsbn(result.getText())
@@ -80,37 +63,28 @@ function App() {
           if (!cancelled) setDevices(videoInputs)
         }
 
-        const videoEl = videoRef.current
-        if (videoEl?.requestVideoFrameCallback) {
-          const onFrame = () => {
-            frameSeen = true
-            if (!cancelled) {
-              videoEl.requestVideoFrameCallback(onFrame)
-            }
-          }
-          videoEl.requestVideoFrameCallback(onFrame)
-        } else {
-          frameSeen = true
-        }
-
-        watchdogTimer = setTimeout(async () => {
+        // 진단용: 0.5초마다 비디오/트랙 상태를 화면에 표시
+        debugInterval = setInterval(() => {
           if (cancelled) return
-          if (!frameSeen && retryCount < 1) {
-            controls.stop()
-            await warmUpOtherCamera(targetDeviceId)
-            if (!cancelled) attemptScan(retryCount + 1, targetDeviceId)
-          }
-        }, 2500)
+          const v = videoRef.current
+          const stream = v?.srcObject
+          const track = stream?.getVideoTracks?.()[0]
+          setDebugInfo(
+            `readyState=${v?.readyState} size=${v?.videoWidth}x${v?.videoHeight} ` +
+            `paused=${v?.paused} trackReadyState=${track?.readyState} ` +
+            `trackMuted=${track?.muted} trackLabel=${track?.label}`
+          )
+        }, 500)
       } catch (err) {
         if (!cancelled) setError(err.message)
       }
     }
 
-    attemptScan(0, deviceId)
+    attemptScan()
 
     return () => {
       cancelled = true
-      clearTimeout(watchdogTimer)
+      clearInterval(debugInterval)
       controlsRef.current?.stop()
     }
   }, [isbn, deviceId])
@@ -168,6 +142,11 @@ function App() {
             <div className="video-box">
               <video ref={videoRef} className="video-el" autoPlay playsInline muted />
             </div>
+            {debugInfo && (
+              <p style={{ fontSize: '10px', color: '#888', wordBreak: 'break-all', marginTop: '6px' }}>
+                {debugInfo}
+              </p>
+            )}
             <p className="hint">바코드를 카메라에 비춰주세요</p>
           </div>
         )}
