@@ -48,7 +48,6 @@ function App() {
     }
   }
 
-  // 카메라 목록 조사해서 "camera 0, facing back" 같은 후면 카메라를 우선 지정
   useEffect(() => {
     async function loadDevices() {
       try {
@@ -240,14 +239,22 @@ function App() {
               )}
               <p className="book-title">{book.title || '제목을 찾을 수 없습니다'}</p>
               <p className="book-meta">{book.author} · {book.publisher}</p>
+
               {book.rating != null && (
                 <div className="rating">
                   <span>{renderStars(book.rating)}</span>
                   <span>{book.rating}/10</span>
+                  <span className="source-tag">알라딘 제공</span>
                 </div>
               )}
+
               {book.description && (
-                <p className="description">{book.description}</p>
+                <div className="description-block">
+                  <p className="section-label">
+                    줄거리 <span className="source-tag">알라딘 제공</span>
+                  </p>
+                  <p className="description">{book.description}</p>
+                </div>
               )}
             </section>
 
@@ -261,7 +268,7 @@ function App() {
                 {book.blogRecommendation && (
                   <div className="blog-recommend">
                     <span className="blog-recommend-percent">
-                      👍 {book.blogRecommendation.recommendPercent}%
+                      👍 블로그 추천율 {book.blogRecommendation.recommendPercent}%
                     </span>
                     <span className="blog-recommend-summary">
                       {book.blogRecommendation.summary}
