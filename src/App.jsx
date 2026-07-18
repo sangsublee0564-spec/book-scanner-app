@@ -19,13 +19,12 @@ function App() {
 
   useEffect(() => {
     if (isbn) return
-    const codeReader = new BrowserMultiFormatReader()
     let cancelled = false
+    let watchdogTimer = null
 
-    async function startScanning() {
+    async function attemptScan(retryCount) {
+      const codeReader = new BrowserMultiFormatReader()
       try {
-        // deviceId를 아직 고르지 않았으면(최초 진입) facingMode로 후면 카메라를 한 번에 요청합니다.
-        // 사용자가 드롭다운에서 특정 카메라를 고른 뒤에는 그 deviceId를 정확히 지정합니다.
         const constraints = deviceId
           ? {
               deviceId: { exact: deviceId },
@@ -55,20 +54,32 @@ function App() {
         controlsRef.current = controls
         videoRef.current?.play().catch(() => {})
 
-        // 권한이 열린 뒤에 카메라 목록(라벨 포함)을 가져와 드롭다운을 채웁니다 (최초 1회만)
         if (devices.length === 0) {
           const allDevices = await navigator.mediaDevices.enumerateDevices()
           const videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
           if (!cancelled) setDevices(videoInputs)
         }
+
+        // 워치독: 2초 뒤에도 영상이 실제로 흘러가고 있지 않으면 자동으로 한 번 재시작합니다
+        const startTime = videoRef.current?.currentTime ?? 0
+        watchdogTimer = setTimeout(() => {
+          if (cancelled) return
+          const nowTime = videoRef.current?.currentTime ?? 0
+          if (nowTime <= startTime && retryCount < 1) {
+            controls.stop()
+            attemptScan(retryCount + 1)
+          }
+        }, 2000)
       } catch (err) {
         if (!cancelled) setError(err.message)
       }
     }
 
-    startScanning()
+    attemptScan(0)
+
     return () => {
       cancelled = true
+      clearTimeout(watchdogTimer)
       controlsRef.current?.stop()
     }
   }, [isbn, deviceId])
