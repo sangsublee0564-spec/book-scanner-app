@@ -1,4 +1,4 @@
-/* 이 파일은 현재 App.jsx에서 사용하지 않습니다. */.app {
+.app {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100vh;
@@ -258,4 +258,27 @@
   font-size: 14.5px;
   font-weight: 700;
   cursor: pointer;
+}
+
+.blog-recommend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #FFF6E5;
+  color: #B7791F;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  margin-bottom: 10px;
+}
+
+.blog-recommend-percent {
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.blog-recommend-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

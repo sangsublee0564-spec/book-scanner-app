@@ -1,3 +1,5 @@
+import { isSponsored, summarizeReviews } from '../lib/blogRecommend.js'
+
 export default async function handler(req, res) {
   const isbn = req.query.isbn
 
@@ -14,6 +16,7 @@ export default async function handler(req, res) {
     description: null,
     rating: null,
     blogPosts: [],
+    blogRecommendation: null,
   }
 
   try {
@@ -35,7 +38,7 @@ export default async function handler(req, res) {
 
   try {
     const searchKeyword = (result.title || isbn) + ' 서평'
-    const naverUrl = `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(searchKeyword)}&display=3`
+    const naverUrl = `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(searchKeyword)}&display=10`
     const naverRes = await fetch(naverUrl, {
       headers: {
         'X-Naver-Client-Id': process.env.NAVER_CLIENT_ID,
@@ -43,10 +46,21 @@ export default async function handler(req, res) {
       },
     })
     const naverData = await naverRes.json()
-    result.blogPosts = (naverData.items || []).map((item) => ({
+
+    const rawPosts = (naverData.items || []).map((item) => ({
       title: item.title.replace(/<\/?b>/g, ''),
+      description: (item.description || '').replace(/<\/?b>/g, ''),
       link: item.link,
     }))
+
+    const filteredPosts = rawPosts.filter((p) => !isSponsored(p)).slice(0, 3)
+
+    result.blogPosts = filteredPosts.map((p) => ({
+      title: p.title,
+      link: p.link,
+    }))
+
+    result.blogRecommendation = await summarizeReviews(result.title || isbn, filteredPosts)
   } catch (err) {
     console.error('네이버 API 오류:', err.message)
   }

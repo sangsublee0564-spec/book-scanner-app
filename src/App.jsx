@@ -117,7 +117,7 @@ function App() {
               </select>
             )}
             <div className="video-box">
-              <video ref={videoRef} className="video-el" />
+              <video ref={videoRef} className="video-el" autoPlay playsInline muted />
             </div>
             <p className="hint">바코드를 카메라에 비춰주세요</p>
           </div>
@@ -155,11 +155,22 @@ function App() {
                   <span className="naver-badge">N</span>
                   <span>네이버 블로그 리뷰</span>
                 </div>
+
+                {book.blogRecommendation && (
+                  <div className="blog-recommend">
+                    <span className="blog-recommend-percent">
+                      👍 {book.blogRecommendation.recommendPercent}%
+                    </span>
+                    <span className="blog-recommend-summary">
+                      {book.blogRecommendation.summary}
+                    </span>
+                  </div>
+                )}
+
                 <ul className="blog-list">
                   {book.blogPosts.slice(0, 3).map((post, i) => (
                     <li key={i}>
-                      
-                        <a
+                      <a
                         href={post.link}
                         target="_blank"
                         rel="noreferrer"
