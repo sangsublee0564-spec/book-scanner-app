@@ -1,6 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrowserMultiFormatReader } from '@zxing/browser'
+import { DecodeHintType, BarcodeFormat } from '@zxing/library'
 import './App.css'
+
+const hints = new Map()
+hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.UPC_A,
+  BarcodeFormat.UPC_E,
+  BarcodeFormat.CODE_128,
+])
+hints.set(DecodeHintType.TRY_HARDER, true)
+
+function timeoutAfter(ms) {
+  return new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`카메라 응답 없음 (${ms / 1000}초 초과)`)), ms)
+  )
+}
 
 function App() {
   const videoRef = useRef(null)
@@ -11,7 +28,6 @@ function App() {
   const [debugInfo, setDebugInfo] = useState('')
   const [playError, setPlayError] = useState('')
 
-  // video 엘리먼트가 생성되는 즉시 muted를 확정시킴 (자동재생 정책 회피)
   function setVideoRef(el) {
     videoRef.current = el
     if (el) {
@@ -23,7 +39,7 @@ function App() {
   useEffect(() => {
     if (result) return
 
-    const codeReader = new BrowserMultiFormatReader()
+    const codeReader = new BrowserMultiFormatReader(hints)
     let cancelled = false
     let nudgeInterval = null
     let debugInterval = null
@@ -31,19 +47,22 @@ function App() {
 
     async function startScanning() {
       try {
-        const controls = await codeReader.decodeFromConstraints(
-          {
-            video: {
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
+        const controls = await Promise.race([
+          codeReader.decodeFromConstraints(
+            {
+              video: {
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+              },
             },
-          },
-          videoRef.current,
-          (scanResult) => {
-            if (scanResult) setResult(scanResult.getText())
-          }
-        )
+            videoRef.current,
+            (scanResult) => {
+              if (scanResult) setResult(scanResult.getText())
+            }
+          ),
+          timeoutAfter(5000),
+        ])
 
         if (cancelled) {
           controls.stop()
@@ -85,7 +104,7 @@ function App() {
           const stream = v2?.srcObject
           const track = stream?.getVideoTracks?.()[0]
           setDebugInfo(
-            `readyState=${v2?.readyState} paused=${v2?.paused} muted=${v2?.muted} ` +
+            `readyState=${v2?.readyState} paused=${v2?.paused} ` +
             `size=${v2?.videoWidth}x${v2?.videoHeight} frames=${frameCount} ` +
             `trackState=${track?.readyState}`
           )
@@ -116,9 +135,14 @@ function App() {
     <div className="app">
       <h1>바코드 스캔 테스트</h1>
 
-      {error && <p className="error">⚠️ {error}</p>}
+      {error && (
+        <div>
+          <p className="error">⚠️ {error}</p>
+          <button onClick={handleReset}>다시 시도</button>
+        </div>
+      )}
 
-      {!result && (
+      {!result && !error && (
         <>
           <div style={{ position: 'relative' }}>
             <video
