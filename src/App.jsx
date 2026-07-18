@@ -9,6 +9,7 @@ function App() {
   const [result, setResult] = useState(null)
   const [videoPlaying, setVideoPlaying] = useState(false)
   const [debugInfo, setDebugInfo] = useState('')
+  const [playError, setPlayError] = useState('')
 
   useEffect(() => {
     if (result) return
@@ -44,7 +45,7 @@ function App() {
         const v = videoRef.current
         if (v) {
           v.muted = true
-          v.play().catch(() => {})
+          v.play().catch((e) => setPlayError(`${e.name}: ${e.message}`))
 
           if ('requestVideoFrameCallback' in v) {
             const onFrame = () => {
@@ -64,7 +65,7 @@ function App() {
           if (cancelled) return
           const vid = videoRef.current
           if (vid && vid.paused) {
-            vid.play().catch(() => {})
+            vid.play().catch((e) => setPlayError(`${e.name}: ${e.message}`))
           }
         }, 300)
 
@@ -77,7 +78,7 @@ function App() {
           setDebugInfo(
             `readyState=${v2?.readyState} paused=${v2?.paused} ` +
             `size=${v2?.videoWidth}x${v2?.videoHeight} frames=${frameCount} ` +
-            `trackState=${track?.readyState}`
+            `trackState=${track?.readyState} hasSrc=${!!v2?.srcObject}`
           )
         }, 500)
       } catch (err) {
@@ -99,6 +100,7 @@ function App() {
     setResult(null)
     setError(null)
     setVideoPlaying(false)
+    setPlayError('')
   }
 
   return (
@@ -123,6 +125,11 @@ function App() {
           {debugInfo && (
             <p style={{ fontSize: '11px', color: '#888', wordBreak: 'break-all' }}>
               {debugInfo}
+            </p>
+          )}
+          {playError && (
+            <p style={{ fontSize: '11px', color: '#c0392b', wordBreak: 'break-all' }}>
+              play() 오류: {playError}
             </p>
           )}
         </>
