@@ -21,6 +21,7 @@ function App() {
   const [book, setBook] = useState(null)
   const [loading, setLoading] = useState(false)
   const [deviceId, setDeviceId] = useState(null)
+  const [videoPlaying, setVideoPlaying] = useState(false)
 
   useEffect(() => {
     async function loadDevices() {
@@ -34,7 +35,6 @@ function App() {
       const allDevices = await navigator.mediaDevices.enumerateDevices()
       const videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
 
-      // "facing back" 카메라들만 추려서, 번호가 가장 낮은(=보통 화질 좋은 기본 렌즈) 것 하나만 선택
       const backDevices = videoInputs.filter((d) => /back/i.test(d.label))
       const candidates = backDevices.length > 0 ? backDevices : videoInputs
 
@@ -52,6 +52,7 @@ function App() {
     if (isbn || !deviceId) return
     const codeReader = new BrowserMultiFormatReader()
     let nudgeInterval = null
+    let onPlaying = null
 
     async function startScanning() {
       try {
@@ -74,16 +75,18 @@ function App() {
         const v = videoRef.current
         if (v) {
           v.muted = true
+          onPlaying = () => setVideoPlaying(true)
+          v.addEventListener('playing', onPlaying)
           v.play().catch(() => {})
         }
 
-        // 첫 프레임만 찍고 멈추는 문제 방지: 멈춰있으면 조용히 재생만 다시 시도
+        // 재생이 실제로 시작될 때까지, 멈춰있으면 조용히 재생만 계속 다시 시도
         nudgeInterval = setInterval(() => {
           const vid = videoRef.current
           if (vid && vid.paused) {
             vid.play().catch(() => {})
           }
-        }, 400)
+        }, 300)
       } catch (err) {
         setError(err.message)
       }
@@ -92,7 +95,11 @@ function App() {
     startScanning()
     return () => {
       clearInterval(nudgeInterval)
+      if (videoRef.current && onPlaying) {
+        videoRef.current.removeEventListener('playing', onPlaying)
+      }
       controlsRef.current?.stop()
+      setVideoPlaying(false)
     }
   }, [isbn, deviceId])
 
@@ -134,8 +141,21 @@ function App() {
         {!isbn && (
           <div className="scan-card">
             <div className="video-box">
-              <video ref={videoRef} className="video-el" autoPlay playsInline muted />
+              <video
+                ref={videoRef}
+                className="video-el"
+                autoPlay
+                playsInline
+                muted
+                style={{ opacity: videoPlaying ? 1 : 0 }}
+              />
             </div>
+            {!videoPlaying && (
+              <div className="loading">
+                <div className="spinner" />
+                <span>카메라 준비 중...</span>
+              </div>
+            )}
             <p className="hint">바코드를 카메라에 비춰주세요</p>
           </div>
         )}
