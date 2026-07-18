@@ -1,15 +1,32 @@
 {
-  "name": "책 스캔 앱",
-  "short_name": "책스캔",
+  "name": "책 스캔",
+  "short_name": "책 스캔",
+  "description": "도서관 서가에서 책을 스캔하면 줄거리, 평점, 블로그 리뷰를 바로 보여주는 앱",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "orientation": "portrait",
+  "background_color": "#F4F5FA",
+  "theme_color": "#4F46E5",
+  "lang": "ko",
   "icons": [
     {
-      "src": "/icons.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
