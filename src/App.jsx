@@ -39,6 +39,7 @@ function App() {
   const [devices, setDevices] = useState([])
   const [deviceId, setDeviceId] = useState(null)
   const [videoPlaying, setVideoPlaying] = useState(false)
+  const [summaryExpanded, setSummaryExpanded] = useState(false)
 
   function setVideoRef(el) {
     videoRef.current = el
@@ -155,6 +156,7 @@ function App() {
     controlsRef.current?.stop()
     setLoading(true)
     setBook(null)
+    setSummaryExpanded(false)
 
     const apiBase = import.meta.env.DEV ? 'http://localhost:4000' : ''
     fetch(`${apiBase}/api/book?isbn=${isbn}`)
@@ -174,6 +176,7 @@ function App() {
     setBook(null)
     setError(null)
     setVideoPlaying(false)
+    setSummaryExpanded(false)
   }
 
   return (
@@ -270,8 +273,21 @@ function App() {
                     <span className="blog-recommend-percent">
                       👍 블로그 추천율 {book.blogRecommendation.recommendPercent}%
                     </span>
-                    <span className="blog-recommend-summary">
+                    <span
+                      className={
+                        summaryExpanded
+                          ? 'blog-recommend-summary expanded'
+                          : 'blog-recommend-summary'
+                      }
+                      onClick={() => setSummaryExpanded((v) => !v)}
+                    >
                       {book.blogRecommendation.summary}
+                    </span>
+                    <span
+                      className="expand-hint"
+                      onClick={() => setSummaryExpanded((v) => !v)}
+                    >
+                      {summaryExpanded ? '접기 ▲' : '더보기 ▼'}
                     </span>
                   </div>
                 )}
