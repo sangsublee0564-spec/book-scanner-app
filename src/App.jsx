@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { BrowserMultiFormatReader } from '@zxing/browser'
 import './App.css'
 
+const MAX_RETRIES = 3
+
 function renderStars(rating10) {
   const fiveScale = Math.round(rating10 / 2)
   return '★'.repeat(fiveScale) + '☆'.repeat(5 - fiveScale)
@@ -10,32 +12,79 @@ function renderStars(rating10) {
 function App() {
   const videoRef = useRef(null)
   const controlsRef = useRef(null)
+  const initedRef = useRef(false)
   const [error, setError] = useState(null)
   const [isbn, setIsbn] = useState(null)
   const [book, setBook] = useState(null)
   const [loading, setLoading] = useState(false)
   const [devices, setDevices] = useState([])
   const [deviceId, setDeviceId] = useState(null)
+  const [camReady, setCamReady] = useState(false)
   const [debugInfo, setDebugInfo] = useState('')
+  const [retryTick, setRetryTick] = useState(0)
+  const [giveUp, setGiveUp] = useState(false)
 
+  // 1) 마운트 시 카메라 목록을 먼저 조사해서 "후면(facing back)" 카메라를 기본값으로 지정
   useEffect(() => {
-    if (isbn) return
+    if (initedRef.current) return
+    initedRef.current = true
+
+    let cancelled = false
+
+    async function initCamera() {
+      try {
+        let allDevices = await navigator.mediaDevices.enumerateDevices()
+        let videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
+
+        // 라벨이 비어있으면(권한 전) 임시로 카메라를 한 번 열어서 권한을 받은 뒤 다시 조사
+        if (videoInputs.length > 0 && videoInputs.every((d) => !d.label)) {
+          const tempStream = await navigator.mediaDevices.getUserMedia({ video: true })
+          tempStream.getTracks().forEach((t) => t.stop())
+          allDevices = await navigator.mediaDevices.enumerateDevices()
+          videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
+        }
+
+        if (cancelled) return
+
+        setDevices(videoInputs)
+
+        // "facing back" 라벨을 가진 카메라를 우선 선택 (없으면 첫 번째 카메라)
+        const backDevice =
+          videoInputs.find((d) => /back/i.test(d.label)) || videoInputs[0]
+
+        setDeviceId(backDevice ? backDevice.deviceId : null)
+      } catch (err) {
+        console.error('카메라 목록 조사 실패:', err.message)
+      } finally {
+        if (!cancelled) setCamReady(true)
+      }
+    }
+
+    initCamera()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // 2) 실제 스캔 시작 (camReady된 뒤에만, 멈춰있으면 자동 재시도)
+  useEffect(() => {
+    if (isbn || !camReady || giveUp) return
     let cancelled = false
     let debugInterval = null
+    let watchdogTimer = null
 
     function pickConstraints(id) {
       return id
         ? {
             deviceId: { exact: id },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            advanced: [{ focusMode: 'continuous' }],
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
           }
         : {
             facingMode: { ideal: 'environment' },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            advanced: [{ focusMode: 'continuous' }],
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
           }
     }
 
@@ -57,13 +106,7 @@ function App() {
         controlsRef.current = controls
         videoRef.current?.play().catch(() => {})
 
-        if (devices.length === 0) {
-          const allDevices = await navigator.mediaDevices.enumerateDevices()
-          const videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
-          if (!cancelled) setDevices(videoInputs)
-        }
-
-        // 진단용: 0.5초마다 비디오/트랙 상태를 화면에 표시
+        // 진단용 상태 표시 (0.5초마다)
         debugInterval = setInterval(() => {
           if (cancelled) return
           const v = videoRef.current
@@ -72,9 +115,27 @@ function App() {
           setDebugInfo(
             `readyState=${v?.readyState} size=${v?.videoWidth}x${v?.videoHeight} ` +
             `paused=${v?.paused} trackReadyState=${track?.readyState} ` +
-            `trackMuted=${track?.muted} trackLabel=${track?.label}`
+            `trackMuted=${track?.muted} trackLabel=${track?.label} retry=${retryTick}`
           )
         }, 500)
+
+        // 멈춤 감지: 2.5초 후에도 화면이 안 뜨면 자동으로 카메라를 다시 켬
+        watchdogTimer = setTimeout(() => {
+          if (cancelled) return
+          const v = videoRef.current
+          const notReady = !v || v.readyState < 2 || v.videoWidth === 0
+          if (notReady) {
+            controlsRef.current?.stop()
+            setRetryTick((n) => {
+              const next = n + 1
+              if (next > MAX_RETRIES) {
+                setGiveUp(true)
+                return n
+              }
+              return next
+            })
+          }
+        }, 2500)
       } catch (err) {
         if (!cancelled) setError(err.message)
       }
@@ -85,9 +146,10 @@ function App() {
     return () => {
       cancelled = true
       clearInterval(debugInterval)
+      clearTimeout(watchdogTimer)
       controlsRef.current?.stop()
     }
-  }, [isbn, deviceId])
+  }, [isbn, deviceId, camReady, retryTick, giveUp])
 
   useEffect(() => {
     if (!isbn) return
@@ -114,6 +176,19 @@ function App() {
     setError(null)
   }
 
+  function handleManualRetry() {
+    setGiveUp(false)
+    setError(null)
+    setRetryTick((n) => n + 1)
+  }
+
+  function handleDeviceChange(e) {
+    setGiveUp(false)
+    setError(null)
+    setRetryTick(0)
+    setDeviceId(e.target.value)
+  }
+
   return (
     <div className="app">
       <header className="app-header">
@@ -130,7 +205,7 @@ function App() {
               <select
                 className="camera-select"
                 value={deviceId || ''}
-                onChange={(e) => setDeviceId(e.target.value)}
+                onChange={handleDeviceChange}
               >
                 {devices.map((d, i) => (
                   <option key={d.deviceId} value={d.deviceId}>
@@ -146,6 +221,14 @@ function App() {
               <p style={{ fontSize: '10px', color: '#888', wordBreak: 'break-all', marginTop: '6px' }}>
                 {debugInfo}
               </p>
+            )}
+            {giveUp && (
+              <div className="alert" style={{ marginTop: '8px' }}>
+                ⚠️ 카메라 연결이 원활하지 않습니다.
+                <button onClick={handleManualRetry} className="rescan-btn" style={{ marginTop: '8px' }}>
+                  🔄 다시 시도
+                </button>
+              </div>
             )}
             <p className="hint">바코드를 카메라에 비춰주세요</p>
           </div>
