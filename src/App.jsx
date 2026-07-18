@@ -39,8 +39,13 @@ function App() {
   useEffect(() => {
     if (isbn || !deviceId) return
     const codeReader = new BrowserMultiFormatReader()
+    let cancelled = false
 
     async function startScanning() {
+      // 카메라 하드웨어가 이전 스트림을 완전히 정리할 시간을 살짝 줍니다
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      if (cancelled) return
+
       try {
         const controls = await codeReader.decodeFromConstraints(
           {
@@ -56,14 +61,23 @@ function App() {
             if (result) setIsbn(result.getText())
           }
         )
+        if (cancelled) {
+          controls.stop()
+          return
+        }
         controlsRef.current = controls
+        // 일부 브라우저에서 스트림 연결 후 자동재생이 안 되는 경우를 대비해 명시적으로 재생 시도
+        videoRef.current?.play().catch(() => {})
       } catch (err) {
-        setError(err.message)
+        if (!cancelled) setError(err.message)
       }
     }
 
     startScanning()
-    return () => controlsRef.current?.stop()
+    return () => {
+      cancelled = true
+      controlsRef.current?.stop()
+    }
   }, [isbn, deviceId])
 
   useEffect(() => {
@@ -170,7 +184,7 @@ function App() {
                 <ul className="blog-list">
                   {book.blogPosts.slice(0, 3).map((post, i) => (
                     <li key={i}>
-                      <a
+                      
                         href={post.link}
                         target="_blank"
                         rel="noreferrer"
