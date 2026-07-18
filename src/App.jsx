@@ -7,6 +7,12 @@ function renderStars(rating10) {
   return '★'.repeat(fiveScale) + '☆'.repeat(5 - fiveScale)
 }
 
+// 라벨에서 "camera 2, facing back" 같은 문자열의 숫자(2)를 뽑아냄
+function extractCameraIndex(label = '') {
+  const match = label.match(/(\d+)/)
+  return match ? parseInt(match[1], 10) : Infinity
+}
+
 function App() {
   const videoRef = useRef(null)
   const controlsRef = useRef(null)
@@ -14,7 +20,6 @@ function App() {
   const [isbn, setIsbn] = useState(null)
   const [book, setBook] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [devices, setDevices] = useState([])
   const [deviceId, setDeviceId] = useState(null)
 
   useEffect(() => {
@@ -28,9 +33,16 @@ function App() {
       }
       const allDevices = await navigator.mediaDevices.enumerateDevices()
       const videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
-      setDevices(videoInputs)
-      if (videoInputs.length > 0) {
-        setDeviceId(videoInputs[videoInputs.length - 1].deviceId)
+
+      // "facing back" 카메라들만 추려서, 번호가 가장 낮은(=보통 화질 좋은 기본 렌즈) 것 하나만 선택
+      const backDevices = videoInputs.filter((d) => /back/i.test(d.label))
+      const candidates = backDevices.length > 0 ? backDevices : videoInputs
+
+      if (candidates.length > 0) {
+        const best = [...candidates].sort(
+          (a, b) => extractCameraIndex(a.label) - extractCameraIndex(b.label)
+        )[0]
+        setDeviceId(best.deviceId)
       }
     }
     loadDevices()
@@ -39,6 +51,7 @@ function App() {
   useEffect(() => {
     if (isbn || !deviceId) return
     const codeReader = new BrowserMultiFormatReader()
+    let nudgeInterval = null
 
     async function startScanning() {
       try {
@@ -57,13 +70,30 @@ function App() {
           }
         )
         controlsRef.current = controls
+
+        const v = videoRef.current
+        if (v) {
+          v.muted = true
+          v.play().catch(() => {})
+        }
+
+        // 첫 프레임만 찍고 멈추는 문제 방지: 멈춰있으면 조용히 재생만 다시 시도
+        nudgeInterval = setInterval(() => {
+          const vid = videoRef.current
+          if (vid && vid.paused) {
+            vid.play().catch(() => {})
+          }
+        }, 400)
       } catch (err) {
         setError(err.message)
       }
     }
 
     startScanning()
-    return () => controlsRef.current?.stop()
+    return () => {
+      clearInterval(nudgeInterval)
+      controlsRef.current?.stop()
+    }
   }, [isbn, deviceId])
 
   useEffect(() => {
@@ -103,19 +133,6 @@ function App() {
 
         {!isbn && (
           <div className="scan-card">
-            {devices.length > 1 && (
-              <select
-                className="camera-select"
-                value={deviceId || ''}
-                onChange={(e) => setDeviceId(e.target.value)}
-              >
-                {devices.map((d, i) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `카메라 ${i + 1}`}
-                  </option>
-                ))}
-              </select>
-            )}
             <div className="video-box">
               <video ref={videoRef} className="video-el" autoPlay playsInline muted />
             </div>
@@ -170,7 +187,7 @@ function App() {
                 <ul className="blog-list">
                   {book.blogPosts.slice(0, 3).map((post, i) => (
                     <li key={i}>
-                      <a
+                        <a
                         href={post.link}
                         target="_blank"
                         rel="noreferrer"
