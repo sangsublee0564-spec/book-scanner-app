@@ -17,14 +17,12 @@ function App() {
   const [isbn, setIsbn] = useState(null)
   const [book, setBook] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [devices, setDevices] = useState([])
   const [deviceId, setDeviceId] = useState(null)
   const [camReady, setCamReady] = useState(false)
-  const [debugInfo, setDebugInfo] = useState('')
   const [retryTick, setRetryTick] = useState(0)
   const [giveUp, setGiveUp] = useState(false)
 
-  // 1) 마운트 시 카메라 목록을 먼저 조사해서 "후면(facing back)" 카메라를 기본값으로 지정
+  // 1) 마운트 시 카메라 목록을 조사해서 "후면(facing back)" 카메라를 자동으로 찾음
   useEffect(() => {
     if (initedRef.current) return
     initedRef.current = true
@@ -36,7 +34,6 @@ function App() {
         let allDevices = await navigator.mediaDevices.enumerateDevices()
         let videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
 
-        // 라벨이 비어있으면(권한 전) 임시로 카메라를 한 번 열어서 권한을 받은 뒤 다시 조사
         if (videoInputs.length > 0 && videoInputs.every((d) => !d.label)) {
           const tempStream = await navigator.mediaDevices.getUserMedia({ video: true })
           tempStream.getTracks().forEach((t) => t.stop())
@@ -46,9 +43,6 @@ function App() {
 
         if (cancelled) return
 
-        setDevices(videoInputs)
-
-        // "facing back" 라벨을 가진 카메라를 우선 선택 (없으면 첫 번째 카메라)
         const backDevice =
           videoInputs.find((d) => /back/i.test(d.label)) || videoInputs[0]
 
@@ -67,11 +61,11 @@ function App() {
     }
   }, [])
 
-  // 2) 실제 스캔 시작 (camReady된 뒤에만, 멈춰있으면 자동 재시도)
+  // 2) 실제 스캔 시작 (camReady된 뒤에만, 멈춰있으면 조용히 자동 복구)
   useEffect(() => {
     if (isbn || !camReady || giveUp) return
     let cancelled = false
-    let debugInterval = null
+    let watchdogInterval = null
     let watchdogTimer = null
 
     function pickConstraints(id) {
@@ -104,26 +98,28 @@ function App() {
           return
         }
         controlsRef.current = controls
-        videoRef.current?.play().catch(() => {})
+        if (videoRef.current) {
+          videoRef.current.muted = true
+          videoRef.current.play().catch(() => {})
+        }
 
-        // 진단용 상태 표시 (0.5초마다)
-        debugInterval = setInterval(() => {
+        // 0.5초마다 멈춰있는지 조용히 확인하고, 멈췄으면 재생만 다시 시도
+        watchdogInterval = setInterval(() => {
           if (cancelled) return
           const v = videoRef.current
           const stream = v?.srcObject
           const track = stream?.getVideoTracks?.()[0]
-          setDebugInfo(
-            `readyState=${v?.readyState} size=${v?.videoWidth}x${v?.videoHeight} ` +
-            `paused=${v?.paused} trackReadyState=${track?.readyState} ` +
-            `trackMuted=${track?.muted} trackLabel=${track?.label} retry=${retryTick}`
-          )
+
+          if (v && v.paused && track && track.readyState === 'live') {
+            v.play().catch(() => {})
+          }
         }, 500)
 
-        // 멈춤 감지: 2.5초 후에도 화면이 안 뜨면 자동으로 카메라를 다시 켬
+        // 1.5초 후에도 여전히 멈춰있으면 스트림 자체를 껐다가 다시 켬
         watchdogTimer = setTimeout(() => {
           if (cancelled) return
           const v = videoRef.current
-          const notReady = !v || v.readyState < 2 || v.videoWidth === 0
+          const notReady = !v || v.readyState < 2 || v.videoWidth === 0 || v.paused
           if (notReady) {
             controlsRef.current?.stop()
             setRetryTick((n) => {
@@ -135,7 +131,7 @@ function App() {
               return next
             })
           }
-        }, 2500)
+        }, 1500)
       } catch (err) {
         if (!cancelled) setError(err.message)
       }
@@ -145,7 +141,7 @@ function App() {
 
     return () => {
       cancelled = true
-      clearInterval(debugInterval)
+      clearInterval(watchdogInterval)
       clearTimeout(watchdogTimer)
       controlsRef.current?.stop()
     }
@@ -182,13 +178,6 @@ function App() {
     setRetryTick((n) => n + 1)
   }
 
-  function handleDeviceChange(e) {
-    setGiveUp(false)
-    setError(null)
-    setRetryTick(0)
-    setDeviceId(e.target.value)
-  }
-
   return (
     <div className="app">
       <header className="app-header">
@@ -201,27 +190,9 @@ function App() {
 
         {!isbn && (
           <div className="scan-card">
-            {devices.length > 1 && (
-              <select
-                className="camera-select"
-                value={deviceId || ''}
-                onChange={handleDeviceChange}
-              >
-                {devices.map((d, i) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `카메라 ${i + 1}`}
-                  </option>
-                ))}
-              </select>
-            )}
             <div className="video-box">
               <video ref={videoRef} className="video-el" autoPlay playsInline muted />
             </div>
-            {debugInfo && (
-              <p style={{ fontSize: '10px', color: '#888', wordBreak: 'break-all', marginTop: '6px' }}>
-                {debugInfo}
-              </p>
-            )}
             {giveUp && (
               <div className="alert" style={{ marginTop: '8px' }}>
                 ⚠️ 카메라 연결이 원활하지 않습니다.
@@ -281,7 +252,7 @@ function App() {
                 <ul className="blog-list">
                   {book.blogPosts.slice(0, 3).map((post, i) => (
                     <li key={i}>
-                      <a
+                      
                         href={post.link}
                         target="_blank"
                         rel="noreferrer"
