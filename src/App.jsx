@@ -303,12 +303,7 @@ function App() {
                 <ul className="blog-list">
                   {book.blogPosts.slice(0, 3).map((post, i) => (
                     <li key={i}>
-                        <a
-                        href={post.link}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="blog-row"
-                      >
+                      <a href={post.link} target="_blank" rel="noreferrer" className="blog-row">
                         <span className="naver-badge small">N</span>
                         <span className="blog-title">{post.title}</span>
                         <span className="arrow">›</span>
