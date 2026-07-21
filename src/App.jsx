@@ -259,6 +259,14 @@ function App() {
                   <p className="description">{book.description}</p>
                 </div>
               )}
+
+              <div className="aladin-attribution">
+                본 도서 정보는{' '}
+                <a href="https://www.aladin.co.kr" target="_blank" rel="noreferrer">
+                  알라딘 인터넷서점
+                </a>
+                의 OpenAPI를 통해 제공됩니다.
+              </div>
             </section>
 
             {book.blogPosts?.length > 0 && (
@@ -295,7 +303,7 @@ function App() {
                 <ul className="blog-list">
                   {book.blogPosts.slice(0, 3).map((post, i) => (
                     <li key={i}>
-                        <a
+                        
                         href={post.link}
                         target="_blank"
                         rel="noreferrer"
