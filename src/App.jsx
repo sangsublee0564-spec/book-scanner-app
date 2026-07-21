@@ -303,7 +303,7 @@ function App() {
                 <ul className="blog-list">
                   {book.blogPosts.slice(0, 3).map((post, i) => (
                     <li key={i}>
-                        
+                      
                         href={post.link}
                         target="_blank"
                         rel="noreferrer"
