@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "kr.bookscanner.app",
+        "sha256_cert_fingerprints": ["F6:AE:EC:EC:54:99:F0:62:CA:D3:9D:8B:94:C5:9C:53:49:E6:6F:84:6B:1E:AC:2F:C6:06:50:AD:37:BE:DD:BA"]
+      }
+    }]
