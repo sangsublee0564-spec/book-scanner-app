@@ -51,26 +51,40 @@ function App() {
 
   useEffect(() => {
     async function loadDevices() {
+      let tempStream = null
       try {
-        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true })
-        tempStream.getTracks().forEach((t) => t.stop())
+        // 후면(환경) 카메라를 우선적으로 요청 — 라벨 문자열("back")에 의존하지 않고
+        // 브라우저/OS가 직접 후면 카메라를 골라주도록 함 (기기별 라벨 표기 차이로 인한
+        // 전면 카메라 오선택 문제 해결)
+        tempStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+        })
       } catch (e) {
         setError(e.message)
         return
       }
+
       const allDevices = await navigator.mediaDevices.enumerateDevices()
       const videoInputs = allDevices.filter((d) => d.kind === 'videoinput')
       setDevices(videoInputs)
 
-      const backDevices = videoInputs.filter((d) => /back/i.test(d.label))
-      const candidates = backDevices.length > 0 ? backDevices : videoInputs
+      let selectedId = tempStream.getVideoTracks()[0]?.getSettings()?.deviceId || null
+      tempStream.getTracks().forEach((t) => t.stop())
 
-      if (candidates.length > 0) {
-        const best = [...candidates].sort(
-          (a, b) => extractCameraIndex(a.label) - extractCameraIndex(b.label)
-        )[0]
-        setDeviceId(best.deviceId)
+      if (!selectedId) {
+        // 위 방식으로 deviceId를 못 얻은 경우에만 라벨 기반으로 보조 판단
+        const backDevices = videoInputs.filter((d) => /back|rear|environment/i.test(d.label))
+        const candidates = backDevices.length > 0 ? backDevices : videoInputs
+
+        if (candidates.length > 0) {
+          const best = [...candidates].sort(
+            (a, b) => extractCameraIndex(a.label) - extractCameraIndex(b.label)
+          )[0]
+          selectedId = best.deviceId
+        }
       }
+
+      if (selectedId) setDeviceId(selectedId)
     }
     loadDevices()
   }, [])
