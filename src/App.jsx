@@ -71,6 +71,14 @@ function App() {
       let selectedId = tempStream.getVideoTracks()[0]?.getSettings()?.deviceId || null
       tempStream.getTracks().forEach((t) => t.stop())
 
+      // 이전에 사용자가 드롭다운에서 직접 고른 카메라가 있으면 그걸 우선 사용
+      // (폰에 후면 카메라가 여러 개(메인/광각/매크로 등)라 자동 감지가 화질 낮은
+      // 렌즈를 고를 수 있어서, 한 번 수동 선택하면 계속 기억하도록 함)
+      const savedId = localStorage.getItem('bookscan_camera_id')
+      if (savedId && videoInputs.some((d) => d.deviceId === savedId)) {
+        selectedId = savedId
+      }
+
       if (!selectedId) {
         // 위 방식으로 deviceId를 못 얻은 경우에만 라벨 기반으로 보조 판단
         const backDevices = videoInputs.filter((d) => /back|rear|environment/i.test(d.label))
@@ -212,6 +220,7 @@ function App() {
                 onChange={(e) => {
                   setVideoPlaying(false)
                   setDeviceId(e.target.value)
+                  localStorage.setItem('bookscan_camera_id', e.target.value)
                 }}
               >
                 {devices.map((d, i) => (
