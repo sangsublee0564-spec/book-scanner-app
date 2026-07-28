@@ -43,6 +43,16 @@
   gap: 10px;
 }
 
+.intro-banner {
+  background: #EAF2FF;
+  color: #2d6cdf;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.4;
+}
+
 .camera-select {
   padding: 8px;
   border-radius: 8px;

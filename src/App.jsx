@@ -213,6 +213,9 @@ function App() {
 
         {!isbn && (
           <div className="scan-card">
+            <p className="intro-banner">
+              📖 책 뒤표지 바코드를 비추면 평점과 블로그 리뷰를 바로 보여드려요
+            </p>
             {devices.length > 1 && (
               <select
                 className="camera-select"
